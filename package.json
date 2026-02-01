@@ -38,6 +38,11 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Enable masking of .env values."
+                },
+                "envMasker.maskColor": {
+                    "type": "string",
+                    "default": "badge.background",
+                    "description": "The color used for masking .env values. Can be a ThemeColor ID (e.g., 'badge.background') or a hex color (e.g., '#ff0000')."
                 }
             }
         }
