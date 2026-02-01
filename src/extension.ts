@@ -4,15 +4,36 @@ export function activate(context: vscode.ExtensionContext) {
     console.log('Env Masker is now active!');
     vscode.window.showInformationMessage('Env Masker Activated! Open a .env file to test.');
 
-    // Create a decoration type that masks text
-    const maskingDecorationType = vscode.window.createTextEditorDecorationType({
-        backgroundColor: new vscode.ThemeColor('badge.background'),
-        color: 'transparent',
-        textDecoration: 'none; cursor: pointer;'
-    });
-
     let activeEditor = vscode.window.activeTextEditor;
-    let isEnabled = true;
+    let isEnabled = vscode.workspace.getConfiguration('envMasker').get('enable', true);
+
+    // Create a decoration type that masks text
+    let maskingDecorationType: vscode.TextEditorDecorationType;
+
+    function updateDecorationType() {
+        if (maskingDecorationType) {
+            maskingDecorationType.dispose();
+        }
+
+        const config = vscode.workspace.getConfiguration('envMasker');
+        const maskColor = config.get<string>('maskColor', 'badge.background');
+
+        let backgroundColor: string | vscode.ThemeColor;
+        // Check if it's a hex color or a ThemeColor ID
+        if (maskColor.startsWith('#')) {
+            backgroundColor = maskColor;
+        } else {
+            backgroundColor = new vscode.ThemeColor(maskColor);
+        }
+
+        maskingDecorationType = vscode.window.createTextEditorDecorationType({
+            backgroundColor: backgroundColor,
+            color: 'transparent',
+            textDecoration: 'none; cursor: pointer;'
+        });
+    }
+
+    updateDecorationType();
 
     // Track revealed ranges. 
     // Key format: "URI::StartLine:StartChar-EndChar"
@@ -23,6 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
+        isEnabled = vscode.workspace.getConfiguration('envMasker').get('enable', true);
         if (!isEnabled) {
             activeEditor.setDecorations(maskingDecorationType, []);
             return;
@@ -172,6 +194,14 @@ export function activate(context: vscode.ExtensionContext) {
             if (key.startsWith(uriPrefix)) {
                 revealedKeys.delete(key);
             }
+        }
+    }, null, context.subscriptions);
+
+    // Listen for configuration changes
+    vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('envMasker.maskColor') || event.affectsConfiguration('envMasker.enable')) {
+            updateDecorationType();
+            updateDecorations(false);
         }
     }, null, context.subscriptions);
 }
