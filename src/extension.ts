@@ -50,57 +50,79 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        // 1. Check if this is likely an .env file
         const doc = activeEditor.document;
-        const isEnvFile = doc.fileName.toLowerCase().endsWith('.env') ||
-            doc.fileName.toLowerCase().includes('.env.') ||
+        const fileName = doc.fileName.toLowerCase();
+
+        // Determine file type
+        let fileType: 'env' | 'json' | null = null;
+
+        if (fileName.endsWith('.env') ||
+            fileName.includes('.env.') ||
             doc.languageId === 'properties' ||
             doc.languageId === 'plaintext' ||
-            doc.languageId === 'dotenv'; // Some extensions add this
+            doc.languageId === 'dotenv') {
+            fileType = 'env';
+        } else if (fileName.endsWith('.json')) {
+            fileType = 'json';
+        }
 
-        if (!isEnvFile) {
+        if (!fileType) {
             return;
         }
 
         const text = doc.getText();
-        const envRegex = /^\s*(?:export\s+)?([\w\.\-\_]+)\s*=(.*)$/gm;
         const maskedRanges: vscode.Range[] = [];
         const uriString = doc.uri.toString();
 
-        let match;
-        while ((match = envRegex.exec(text))) {
-            // match[0] is the whole line: KEY=VALUE
-            // match[1] is KEY
-            // match[2] is VALUE (what we want to mask)
+        let regex: RegExp;
+        // Different regex strategies
+        if (fileType === 'env') {
+            regex = /^\s*(?:export\s+)?([\w\.\-\_]+)\s*=(.*)$/gm;
+        } else {
+            // JSON: "key": "value"
+            // Handle escaped characters inside the value string
+            regex = /"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+        }
 
+        let match;
+        while ((match = regex.exec(text))) {
             const value = match[2];
+
+            // Skip empty or trivial values if needed, though empty strings might be secrets too? 
+            // Existing logic skipped empty.
             if (!value || value.trim().length === 0) {
                 continue;
             }
 
-            // Calculate start and end position of the VALUE
-            // The value starts after the equals sign.
-            // match.index is start of line. match[0].indexOf('=') gives relative pos of =.
-            // But match[2] is simply the captured group.
+            let valueStartIndex = 0;
+            let valueEndIndex = 0;
 
-            // We can calculate the start index of the value absolute in the file
-            // start of match + length of key + length of equals sign (and potential whitespace before value)
+            if (fileType === 'env') {
+                const matchStart = match.index;
+                const matchEnd = match.index + match[0].length;
+                valueStartIndex = matchEnd - value.length;
+                valueEndIndex = matchEnd;
+            } else {
+                // For JSON, we need to find where the value actually is within the match
+                // Match[0] is roughly: "key": "value"
+                const matchText = match[0];
+                const key = match[1];
 
-            // A safer way to get the exact range of match[2]:
-            const matchStart = match.index;
-            const matchEnd = match.index + match[0].length;
+                // We start searching after the key to avoid matching content in the key
+                // The key is at the start of the match (plus potentially a quote)
+                const keyEndIndexInMatch = matchText.indexOf(key) + key.length;
+                const afterKey = matchText.substring(keyEndIndexInMatch);
 
-            // We know match[0] ends with match[2].
-            // So the value starts at matchEnd - value.length
-            const valueStartIndex = matchEnd - value.length;
-            const valueEndIndex = matchEnd;
+                // Find the colon and then the opening quote of the value
+                const colonIndex = afterKey.indexOf(':');
+                const valueQuoteIndex = afterKey.indexOf('"', colonIndex + 1);
 
-            // Generate a unique key for this range to track its revealed state
-            // "lineIndex" is safer than character offset if file changes, but regex runs on full text.
-            // Let's use start/end offset for now as they are recalculated on every edit.
-            // Actually, if we edit the file, offsets change.
-            // Better to rely on the fact that updateDecorations runs on change.
-            // If we use Line number as key, it might be more stable for simple edits.
+                // The absolute start index of the value
+                // match.index + length before value
+                valueStartIndex = match.index + keyEndIndexInMatch + valueQuoteIndex + 1;
+                valueEndIndex = valueStartIndex + value.length;
+            }
+
             const startPos = doc.positionAt(valueStartIndex);
             const endPos = doc.positionAt(valueEndIndex);
 
@@ -119,11 +141,6 @@ export function activate(context: vscode.ExtensionContext) {
                         }
                     } else {
                         // If just clicking (empty selection)
-                        // Exclude the 'end' position because clicking whitespace to the right of the line
-                        // places the cursor at the end, which triggers a reveal unintendedly.
-                        // detailed interaction:
-                        // Start point (left edge): Revealed.
-                        // End point (right edge): NOT Revealed (to avoid right-whitespace click).
                         if (range.contains(selection.active) && !selection.active.isEqual(range.end)) {
                             revealedKeys.add(key);
                         }

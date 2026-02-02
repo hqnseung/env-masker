@@ -2,7 +2,7 @@
     "name": "env-masker",
     "displayName": "Env Masker",
     "description": "Masks sensitive values in .env files to prevent accidental exposure.",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "publisher": "hqnseung",
     "repository": {
         "type": "git",
