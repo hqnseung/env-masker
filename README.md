@@ -21,6 +21,6 @@ A VS Code extension that specifically masks values in `.env` files to prevent ac
 
 ## Installation
 
-1. Download the `.vsix` file from [here](https://github.com/hqnseung/env-masker/releases/tag/V0.0.1)
+1. Download the `.vsix` file from [here](https://github.com/hqnseung/env-masker/releases/)
 2. In VS Code, go to Extensions -> `...` (Views and More Actions) -> `Install from VSIX...`
 3. Select the file.
